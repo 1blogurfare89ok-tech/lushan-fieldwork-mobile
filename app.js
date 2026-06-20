@@ -69,15 +69,7 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 function initLucide() {
-  if (typeof lucide !== "undefined" && lucide.createIcons) {
-    try {
-      lucide.createIcons();
-    } catch (e) {
-      console.warn("Lucide createIcons error:", e);
-    }
-  } else {
-    console.warn("Lucide library is not loaded yet.");
-  }
+  lucide.createIcons();
 }
 
 // --- Tab Navigation ---
@@ -210,6 +202,7 @@ function initGPS() {
 // --- Gyroscope & Compass Logic ---
 function initSensorAccess() {
   const btn = document.getElementById("btnRequestSensor");
+  if (!btn) return;
   
   // Check if iOS permission request is needed
   if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
@@ -718,16 +711,16 @@ function handleWebSocketMessage(data) {
   const payload = data.data;
   
   if (type === "location") {
-    const id = payload.member_id;
+    const id = payload.member_id || payload.memberId;
     const index = state.members.findIndex(m => m.memberId === id);
     const updatedMember = {
       memberId: id,
-      displayName: payload.displayName || id,
-      latitude: payload.lat,
-      longitude: payload.lon,
+      displayName: payload.displayName || payload.display_name || id,
+      latitude: payload.lat !== undefined ? payload.lat : payload.latitude,
+      longitude: payload.lon !== undefined ? payload.lon : payload.longitude,
       accuracy: payload.accuracy,
       battery: payload.battery,
-      receivedAt: payload.received_at || new Date().toISOString()
+      receivedAt: payload.received_at || payload.receivedAt || new Date().toISOString()
     };
     
     if (index >= 0) {
@@ -740,23 +733,49 @@ function handleWebSocketMessage(data) {
     updateMapTeammates();
   } else if (type === "message") {
     // Add communication message
-    if (state.messages.none(m => m.id === payload.id)) {
-      state.messages.push(payload);
+    const msg = {
+      id: payload.id,
+      senderId: payload.sender_id || payload.senderId,
+      senderName: payload.sender_name || payload.senderName || payload.sender_id || payload.senderId,
+      recipientId: payload.recipient_id || payload.recipientId || null,
+      content: payload.content,
+      timestamp: payload.timestamp || (payload.created_at ? new Date(payload.created_at).getTime() : Date.now())
+    };
+    if (state.messages.none(m => m.id === msg.id)) {
+      state.messages.push(msg);
       renderChatMessages();
     }
   } else if (type === "sos") {
-    if (state.sos.none(s => s.id === payload.id)) {
-      state.sos.push(payload);
+    const sosEvent = {
+      id: payload.id,
+      memberId: payload.member_id || payload.memberId,
+      message: payload.message,
+      latitude: payload.latitude || payload.lat,
+      longitude: payload.longitude || payload.lon,
+      status: payload.status,
+      timestamp: payload.timestamp || payload.created_at || Date.now()
+    };
+    if (state.sos.none(s => s.id === sosEvent.id)) {
+      state.sos.push(sosEvent);
     }
     renderSosBanner();
     renderTeamMembers();
   } else if (type === "sos_updated") {
-    const index = state.sos.findIndex(s => s.id === payload.id);
-    if (payload.status === "resolved") {
+    const sosEvent = {
+      id: payload.id,
+      memberId: payload.member_id || payload.memberId,
+      message: payload.message,
+      latitude: payload.latitude || payload.lat,
+      longitude: payload.longitude || payload.lon,
+      status: payload.status,
+      timestamp: payload.timestamp || payload.created_at || Date.now()
+    };
+    const index = state.sos.findIndex(s => s.id === sosEvent.id);
+    if (sosEvent.status === "resolved") {
       if (index >= 0) state.sos.splice(index, 1);
     } else {
-      if (index >= 0) state.sos[index] = payload;
-      else state.sos.push(payload);
+      if (index >= 0) state.sos[index] = sosEvent;
+      else state.sos.push(sosEvent);
     }
     renderSosBanner();
     renderTeamMembers();
@@ -790,7 +809,16 @@ async function pullData() {
     const resM = await fetch(`${state.settings.serverUrl}/api/team/members`, { headers });
     if (resM.ok) {
       const data = await resM.json();
-      state.members = data;
+      const rawList = Array.isArray(data) ? data : (data.data || []);
+      state.members = rawList.map(m => ({
+        memberId: m.member_id || m.memberId || "",
+        displayName: m.displayName || m.display_name || m.member_id || m.memberId || "",
+        latitude: m.lat !== undefined ? m.lat : (m.latitude !== undefined ? m.latitude : null),
+        longitude: m.lon !== undefined ? m.lon : (m.longitude !== undefined ? m.longitude : null),
+        accuracy: m.accuracy !== undefined ? m.accuracy : null,
+        battery: m.battery !== undefined ? m.battery : 100,
+        receivedAt: m.received_at || m.receivedAt || null
+      }));
       renderTeamMembers();
       updateMapTeammates();
     }
@@ -798,14 +826,34 @@ async function pullData() {
     // Pull active SOS
     const resS = await fetch(`${state.settings.serverUrl}/api/team/sos/active`, { headers });
     if (resS.ok) {
-      state.sos = await resS.json();
+      const data = await resS.json();
+      const rawList = Array.isArray(data) ? data : (data.data || []);
+      state.sos = rawList.map(s => ({
+        id: s.id,
+        memberId: s.member_id || s.memberId,
+        message: s.message,
+        latitude: s.latitude || s.lat,
+        longitude: s.longitude || s.lon,
+        status: s.status,
+        timestamp: s.timestamp || s.created_at || Date.now()
+      }));
       renderSosBanner();
+      renderTeamMembers();
     }
     
     // Pull messages
     const resC = await fetch(`${state.settings.serverUrl}/api/team/messages`, { headers });
     if (resC.ok) {
-      state.messages = await resC.json();
+      const data = await resC.json();
+      const rawList = Array.isArray(data) ? data : (data.data || []);
+      state.messages = rawList.map(msg => ({
+        id: msg.id,
+        senderId: msg.sender_id || msg.senderId,
+        senderName: msg.sender_name || msg.senderName || msg.sender_id || msg.senderId,
+        recipientId: msg.recipient_id || msg.recipientId || null,
+        content: msg.content,
+        timestamp: msg.timestamp || (msg.created_at ? new Date(msg.created_at).getTime() : Date.now())
+      }));
       renderChatMessages();
       populateRecipientDropdown();
     }
@@ -909,15 +957,24 @@ async function triggerSos() {
         "Authorization": `Bearer ${state.settings.memberToken}`
       },
       body: JSON.stringify({
-        memberId: state.settings.memberId,
+        member_id: state.settings.memberId,
         message: reason,
-        latitude: state.gps.lat || 29.57,
-        longitude: state.gps.lon || 115.99
+        lat: state.gps.lat || 29.57,
+        lon: state.gps.lon || 115.99
       })
     });
     
     if (res.ok) {
-      const sosEvent = await res.json();
+      const sosEventData = await res.json();
+      const sosEvent = {
+        id: sosEventData.id,
+        memberId: sosEventData.member_id || sosEventData.memberId,
+        message: sosEventData.message,
+        latitude: sosEventData.latitude || sosEventData.lat,
+        longitude: sosEventData.longitude || sosEventData.lon,
+        status: sosEventData.status,
+        timestamp: sosEventData.timestamp || sosEventData.created_at || Date.now()
+      };
       if (state.sos.none(s => s.id === sosEvent.id)) {
         state.sos.push(sosEvent);
       }
@@ -1033,8 +1090,8 @@ async function sendChatMessage(e) {
   if (!content) return;
   
   const payload = {
-    senderId: state.settings.memberId,
-    recipientId: recipient || null,
+    sender_id: state.settings.memberId,
+    recipient_id: recipient || null,
     content: content,
     timestamp: Date.now()
   };
@@ -1057,7 +1114,15 @@ async function sendChatMessage(e) {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        const msg = await res.json();
+        const msgData = await res.json();
+        const msg = {
+          id: msgData.id,
+          senderId: msgData.sender_id || msgData.senderId,
+          senderName: msgData.sender_name || msgData.senderName || msgData.sender_id || msgData.senderId,
+          recipientId: msgData.recipient_id || msgData.recipientId || null,
+          content: msgData.content,
+          timestamp: msgData.timestamp || (msgData.created_at ? new Date(msgData.created_at).getTime() : Date.now())
+        };
         if (state.messages.none(m => m.id === msg.id)) {
           state.messages.push(msg);
           renderChatMessages();
@@ -1321,16 +1386,11 @@ function openPhotoLightbox(path) {
   initLucide();
 }
 
-const closeLightboxBtn = document.getElementById("closeLightbox");
-if (closeLightboxBtn) {
-  closeLightboxBtn.onclick = () => {
-    const lightbox = document.getElementById("photoLightbox");
-    if (lightbox) {
-      lightbox.classList.remove("open");
-      lightbox.setAttribute("aria-hidden", "true");
-    }
-  };
-}
+document.getElementById("closeLightbox").onclick = () => {
+  const lightbox = document.getElementById("photoLightbox");
+  lightbox.classList.remove("open");
+  lightbox.setAttribute("aria-hidden", "true");
+};
 
 // --- UUID Generator ---
 function generateUUID() {
