@@ -69,7 +69,15 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 function initLucide() {
-  lucide.createIcons();
+  if (typeof lucide !== "undefined" && lucide.createIcons) {
+    try {
+      lucide.createIcons();
+    } catch (e) {
+      console.warn("Lucide createIcons error:", e);
+    }
+  } else {
+    console.warn("Lucide library is not loaded yet.");
+  }
 }
 
 // --- Tab Navigation ---
@@ -1313,11 +1321,16 @@ function openPhotoLightbox(path) {
   initLucide();
 }
 
-document.getElementById("closeLightbox").onclick = () => {
-  const lightbox = document.getElementById("photoLightbox");
-  lightbox.classList.remove("open");
-  lightbox.setAttribute("aria-hidden", "true");
-};
+const closeLightboxBtn = document.getElementById("closeLightbox");
+if (closeLightboxBtn) {
+  closeLightboxBtn.onclick = () => {
+    const lightbox = document.getElementById("photoLightbox");
+    if (lightbox) {
+      lightbox.classList.remove("open");
+      lightbox.setAttribute("aria-hidden", "true");
+    }
+  };
+}
 
 // --- UUID Generator ---
 function generateUUID() {
