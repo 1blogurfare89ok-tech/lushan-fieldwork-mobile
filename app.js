@@ -85,6 +85,10 @@ function switchTab(tabId) {
     setTimeout(() => {
       if (state.map) {
         state.map.invalidateSize();
+        // Recenter to current GPS location or default Wangjiapo
+        const lat = state.gps.lat || 29.5742;
+        const lon = state.gps.lon || 116.0026;
+        state.map.setView([lat, lon], state.map.getZoom() || 14);
       }
     }, 100);
   } else if (tabId === "rose") {
@@ -651,19 +655,28 @@ function renderRoseDiagram() {
 // --- WebSocket & Real-time Sync ---
 function connectWebSocket() {
   if (state.socket) {
-    state.socket.close();
+    try {
+      state.socket.close();
+    } catch (e) {}
   }
   
   const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
   // Extract host from serverUrl
-  const serverHost = state.settings.serverUrl.replace(/^https?:\/\//, "");
+  const serverHost = state.settings.serverUrl ? state.settings.serverUrl.replace(/^https?:\/\//, "") : "";
   
   if (!serverHost) return;
   
   const wsUrl = `${wsProto}//${serverHost}/api/team/ws?token=${state.settings.memberToken}`;
   console.log("Connecting WebSocket to", wsUrl);
   
-  state.socket = new WebSocket(wsUrl);
+  try {
+    state.socket = new WebSocket(wsUrl);
+  } catch (e) {
+    console.error("Failed to create WebSocket:", e);
+    state.isWebSocketConnected = false;
+    updateNetStatus("连接失败，轮询中", "offline");
+    return;
+  }
   
   state.socket.onopen = () => {
     state.isWebSocketConnected = true;
@@ -1083,13 +1096,15 @@ function initMap() {
     position: 'bottomleft'
   }).addTo(state.map);
   
-  // Base layers
-  state.layers.normal = L.tileLayer("https://tile.openstreetmap.org/{z}/{y}/{x}.png", {
-    maxZoom: 19
+  // Base layers (AMap Tiles for China high-speed rendering)
+  state.layers.normal = L.tileLayer("https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}", {
+    maxZoom: 19,
+    subdomains: ["1", "2", "3", "4"]
   });
   
-  state.layers.satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-    maxZoom: 19
+  state.layers.satellite = L.tileLayer("https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}", {
+    maxZoom: 19,
+    subdomains: ["1", "2", "3", "4"]
   });
   
   // Set default normal layer

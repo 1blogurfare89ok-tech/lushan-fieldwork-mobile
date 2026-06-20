@@ -1055,6 +1055,7 @@ select option {
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--line);
   z-index: 1000;
+  height: 100%;
 }
 .nav-item {
   flex: 1;
@@ -1108,3 +1109,14 @@ select option {
 .leaflet-popup-content {
   font-size: 11px !important;
 }
+
+/* Custom screen override for Full-screen Leaflet Map */
+#screen-map {
+  padding: 0 !important;
+  overflow: hidden !important;
+  display: none;
+}
+#screen-map.active {
+  display: block !important;
+}
+
