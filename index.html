@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1311">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>庐山野外协同终端 (Mobile)</title>
+  
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <!-- Outfit Font -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" />
+  <!-- Custom Mobile CSS -->
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="mobile-shell">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="brand">
+        <i data-lucide="mountain-snow"></i>
+        <span>庐山野外协同终端</span>
+      </div>
+      <div class="network-badge" id="netBadge">
+        <span class="dot"></span>
+        <span id="netText">准备就绪</span>
+      </div>
+    </header>
+
+    <!-- Main Screens Container -->
+    <main class="screen-container">
+      <!-- 1. Dashboard Screen -->
+      <section class="screen active" id="screen-dashboard">
+        <div class="card current-task-card">
+          <h3>当前任务</h3>
+          <p class="task-desc">第四纪地貌与现代水文联合调查</p>
+          <div class="gps-stats">
+            <div class="gps-row">
+              <i data-lucide="map-pin" class="accent-icon"></i>
+              <div>
+                <strong id="dashCoords">等待 GPS 定位</strong>
+                <span id="dashAccuracy" class="subtext">请保持在开阔区域</span>
+              </div>
+            </div>
+            <div class="gps-row">
+              <i data-lucide="compass" class="secondary-icon"></i>
+              <div>
+                <strong id="dashHeading">设备航向 --°</strong>
+                <span id="dashQuality" class="subtext">需要传感器校准</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <i data-lucide="users"></i>
+            <span class="val" id="dashMemberCount">0 / 6</span>
+            <span class="lbl">队员在线</span>
+          </div>
+          <div class="metric-card">
+            <i data-lucide="cloud-upload"></i>
+            <span class="val" id="dashPendingCount">0</span>
+            <span class="lbl">待同步记录</span>
+          </div>
+          <div class="metric-card">
+            <i data-lucide="user"></i>
+            <span class="val" id="dashMemberId">--</span>
+            <span class="lbl">我的身份</span>
+          </div>
+        </div>
+
+        <div class="quick-actions">
+          <button class="btn btn-primary" onclick="switchTab('field')">
+            <i data-lucide="edit-3"></i> 开始测量
+          </button>
+          <button class="btn btn-outline" onclick="switchTab('team')">
+            <i data-lucide="users"></i> 团队协同
+          </button>
+        </div>
+      </section>
+
+      <!-- 2. Field Screen (Compass & Recording) -->
+      <section class="screen" id="screen-field">
+        <!-- Geological Compass Panel -->
+        <div class="card compass-panel">
+          <div class="compass-circle-outer">
+            <div class="compass-disc" id="compassDisc">
+              <div class="compass-marker north">N</div>
+              <div class="compass-marker east">E</div>
+              <div class="compass-marker south">S</div>
+              <div class="compass-marker west">W</div>
+              <!-- Needle indicators -->
+              <div class="needle strike-needle" id="needleStrike"></div>
+              <div class="needle dip-needle" id="needleDip"></div>
+            </div>
+          </div>
+          <div class="compass-readout">
+            <div class="readout-item">
+              <span class="lbl">走向</span>
+              <span class="val" id="liveStrike">--°</span>
+            </div>
+            <div class="readout-item">
+              <span class="lbl">倾向</span>
+              <span class="val" id="liveDipDir">--°</span>
+            </div>
+            <div class="readout-item">
+              <span class="lbl">倾角</span>
+              <span class="val" id="liveDip">--°</span>
+            </div>
+          </div>
+          <div class="compass-actions">
+            <button class="btn btn-ios-permission" id="btnRequestSensor" style="display:none;">
+              <i data-lucide="shield-alert"></i> 授权陀螺仪
+            </button>
+            <button class="btn btn-primary btn-lock" onclick="lockMeasurement()">
+              <i data-lucide="lock"></i> 锁定测量值
+            </button>
+          </div>
+        </div>
+
+        <!-- Station Selection -->
+        <div class="field-section">
+          <h4>选择观测站</h4>
+          <div class="station-chips" id="stationChips">
+            <!-- Dynamically populated chips -->
+          </div>
+        </div>
+
+        <!-- Entry Form -->
+        <div class="card entry-card">
+          <div class="form-grid">
+            <div class="form-row">
+              <label>走向 (°)</label>
+              <input type="number" id="inputStrike" placeholder="0-360">
+            </div>
+            <div class="form-row">
+              <label>倾向 (°)</label>
+              <input type="number" id="inputDipDir" placeholder="0-360">
+            </div>
+            <div class="form-row">
+              <label>倾角 (°)</label>
+              <input type="number" id="inputDip" placeholder="0-90">
+            </div>
+          </div>
+          <div class="form-row margin-top">
+            <label>备注 / 考察记录</label>
+            <textarea id="inputNotes" rows="2" placeholder="输入记录备注信息"></textarea>
+          </div>
+          
+          <div class="photo-capture-area">
+            <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display:none;" onchange="handlePhotoCapture(event)" />
+            <button class="btn btn-outline btn-photo" onclick="triggerCamera()">
+              <i data-lucide="camera"></i> 拍摄照片
+            </button>
+            <div class="photo-preview-wrap" id="photoPreviewContainer" style="display:none;">
+              <img id="photoPreview" src="" alt="预览图" />
+              <button class="btn-remove-photo" onclick="clearPhoto()"><i data-lucide="x"></i></button>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" onclick="saveRecord()">
+              <i data-lucide="save"></i> 保存记录
+            </button>
+            <button class="btn btn-outline" id="btnSyncRecords" onclick="syncFields()">
+              <i data-lucide="refresh-cw"></i> 立即同步
+            </button>
+          </div>
+        </div>
+
+        <!-- Local Records History -->
+        <div class="field-section">
+          <h4>采集记录历史</h4>
+          <div class="records-list" id="recordsList">
+            <!-- Dynamically populated records -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Rose Diagram Screen -->
+      <section class="screen" id="screen-rose">
+        <div class="card rose-card">
+          <h3>走向玫瑰统计图</h3>
+          <p class="subtext">基于本地与同步记录的走向分布轴向统计</p>
+          
+          <div class="interval-chips">
+            <button class="chip active" onclick="changeRoseInterval(5)">5°</button>
+            <button class="chip" onclick="changeRoseInterval(10)">10°</button>
+            <button class="chip" onclick="changeRoseInterval(15)">15°</button>
+          </div>
+
+          <div class="canvas-wrap">
+            <div class="canvas-relative">
+              <canvas id="roseCanvas" width="300" height="300"></canvas>
+              <span class="compass-label north">N</span>
+              <span class="compass-label west">W</span>
+              <span class="compass-label east">E</span>
+              <span class="compass-label south">S</span>
+            </div>
+          </div>
+
+          <div class="rose-stats">
+            <div class="stat-row"><span>总测点数</span><strong id="roseTotalCount">0</strong></div>
+            <div class="stat-row"><span>优势构造走向</span><strong id="roseDominant" class="accent-text">--</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Team Screen (Chat & SOS) -->
+      <section class="screen" id="screen-team">
+        <!-- active SOS notification banner -->
+        <div class="sos-alert-banner" id="mySosBanner" style="display:none;">
+          <div class="sos-info">
+            <i data-lucide="siren"></i>
+            <span>您正处于紧急呼救状态！</span>
+          </div>
+          <button class="btn btn-resolve-sos" onclick="cancelMySos()">取消我的呼救</button>
+        </div>
+
+        <!-- Teammates status list -->
+        <div class="card team-members-card">
+          <div class="card-header">
+            <h4>团队状态</h4>
+            <span class="badge" id="teamOnlineCount">0 / 6 在线</span>
+          </div>
+          <div class="members-status-list" id="teamMemberList">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Actions Panel (SOS trigger / map toggle) -->
+        <div class="team-quick-bar">
+          <button class="btn btn-outline" onclick="switchTab('map')">
+            <i data-lucide="map"></i> 团队地图
+          </button>
+          <button class="btn btn-danger" id="btnEmergencySos" onclick="triggerSos()">
+            <i data-lucide="alert-triangle"></i> 紧急呼救
+          </button>
+        </div>
+
+        <!-- Comm chat -->
+        <div class="card chat-card">
+          <div class="card-header">
+            <h4>组内通讯</h4>
+            <small>实时同步</small>
+          </div>
+          <div class="chat-messages" id="chatFeed">
+            <div class="empty-feed">暂无通讯内容</div>
+          </div>
+          <form class="chat-composer" onsubmit="sendChatMessage(event)">
+            <select id="chatRecipient" class="recipient-select">
+              <option value="">发送至全组</option>
+            </select>
+            <div class="input-row">
+              <input type="text" id="chatMessageInput" placeholder="输入调度指令或安全提醒" maxlength="500" required />
+              <button type="submit" class="btn-send"><i data-lucide="send"></i></button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- 5. Map Screen -->
+      <section class="screen" id="screen-map">
+        <div class="map-wrapper">
+          <div id="mobileMap"></div>
+          
+          <!-- Map Floating Controls -->
+          <div class="map-controls">
+            <!-- 1. Locate Self -->
+            <button class="map-btn" onclick="locateSelfOnMap()" title="定位自己">
+              <i data-lucide="my-location"></i>
+            </button>
+            <!-- 2. Teammates List -->
+            <button class="map-btn" onclick="toggleMapTeammatesList()" title="队员列表">
+              <i data-lucide="users"></i>
+            </button>
+            <!-- 3. Satellite Toggle -->
+            <button class="map-btn" id="btnSatelliteToggle" onclick="toggleSatelliteLayer()" title="切换卫星图">
+              <i data-lucide="layers"></i>
+            </button>
+          </div>
+
+          <!-- Teammates floating card overlay -->
+          <div class="map-overlay-card" id="mapTeammatesOverlay" style="display:none;">
+            <div class="overlay-header">
+              <h5>队员位置与导航</h5>
+              <button class="btn-close" onclick="toggleMapTeammatesList()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="overlay-list" id="mapTeammatesList">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Navigation Card Overlay -->
+          <div class="map-nav-card" id="mapNavTargetCard" style="display:none;">
+            <div class="nav-card-content">
+              <h5 id="navTargetName">导航目的地</h5>
+              <p id="navTargetCoords" class="subtext">位置: --</p>
+              <div class="nav-actions">
+                <button class="btn btn-outline btn-sm" onclick="cancelMapNavigation()">取消</button>
+                <button class="btn btn-primary btn-sm" onclick="startMapNavigation()">立即导航</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Settings Screen -->
+      <section class="screen" id="screen-settings">
+        <div class="card settings-card">
+          <h3>终端设置</h3>
+          <div class="form-row">
+            <label>后端 API 地址</label>
+            <input type="url" id="setServerUrl" placeholder="https://xxxx.trycloudflare.com">
+          </div>
+          <div class="form-row">
+            <label>成员 ID</label>
+            <input type="text" id="setMemberId" placeholder="member-0x">
+          </div>
+          <div class="form-row">
+            <label>成员令牌 (Token)</label>
+            <input type="password" id="setMemberToken" placeholder="输入成员令牌">
+          </div>
+          <div class="form-row">
+            <label>高德地图 Android Key (Web版不适用)</label>
+            <input type="text" id="setAmapKey" placeholder="内置或留空">
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()">
+            保存并重新连接
+          </button>
+          <button class="btn btn-outline" style="margin-top:8px;" onclick="testBackendHealth()">
+            测试后端健康状况
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="switchTab('dashboard')" id="nav-dashboard">
+        <i data-lucide="layout-dashboard"></i>
+        <span>主页</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('field')" id="nav-field">
+        <i data-lucide="compass"></i>
+        <span>测量</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('rose')" id="nav-rose">
+        <i data-lucide="pie-chart"></i>
+        <span>玫瑰图</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('team')" id="nav-team">
+        <i data-lucide="users"></i>
+        <span>团队</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('map')" id="nav-map">
+        <i data-lucide="map"></i>
+        <span>地图</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('settings')" id="nav-settings">
+        <i data-lucide="settings"></i>
+        <span>设置</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Leaflet Map JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <!-- Custom Mobile JS Logic -->
+  <script src="./app.js"></script>
+</body>
+</html>
